@@ -1,0 +1,23 @@
+name: Test Python
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 저장소 가져오기
+        uses: actions/checkout@v4
+
+      - name: Python 설치
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Python 버전 확인
+        run: python --version
+
+      - name: Hello 출력
+        run: echo "Hello GitHub Actions!"
