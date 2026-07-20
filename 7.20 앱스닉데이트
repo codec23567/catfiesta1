@@ -1,0 +1,141 @@
+/*
+ 데이터가 있는 행까지만
+ */
+
+function fillEmptyCellsOnly(sheet) {
+  var startRow = 5; 
+  var lastRow = sheet.getLastRow(); // 실제 작성된 마지막 행을 자동 감지
+  if (lastRow < startRow) return;   
+  
+  var numRows = lastRow - startRow + 1;
+  
+  var urls = sheet.getRange(startRow, 3, numRows, 1).getValues(); // C열: URL
+  var dateRange = sheet.getRange(startRow, 5, numRows, 1);        // E열: 날짜
+  var authorRange = sheet.getRange(startRow, 6, numRows, 1);      // F열: 작성자
+  
+  var dates = dateRange.getValues();
+  var authors = authorRange.getValues();
+  
+  var requests = [];
+  var targetIndices = []; 
+  
+  for (var i = 0; i < urls.length; i++) {
+    var url = urls[i][0];
+    var existingDate = dates[i][0];
+    var existingAuthor = authors[i][0];
+    
+    // URL 칸이 비어있으면 기존 날짜와 작성자 기록을 지옵니다.
+    if (!url || url.toString().trim() === "") {
+      dates[i][0] = "";
+      authors[i][0] = "";
+      continue;
+    }
+    
+    // [크롤링 규칙] URL이 있고 날짜나 작성자가 비어있거나, 이전 실패 문자(retry)가 있으면 재수집 대상으로 등록
+    if (url.toString().indexOf("dcinside") !== -1) {
+      var isClear = !existingDate || !existingAuthor || existingDate.toString().trim() === "";
+      var isRetry = existingDate.toString().trim() === "retry";
+      
+      if (isClear || isRetry) {
+        requests.push({
+          'url': url.toString().trim()
+        });
+        targetIndices.push(i);
+      }
+    }
+  }
+  
+  if (requests.length === 0) {
+    dateRange.setValues(dates);
+    authorRange.setValues(authors);
+    return;
+  }
+  
+  // 동시 접속 및 3회 재시도 로직
+  var MAX_RETRIES = 3;
+  var currentTry = 0;
+  var pendingRequests = requests.slice();
+  var pendingIndices = targetIndices.slice();
+  
+  while (pendingRequests.length > 0 && currentTry < MAX_RETRIES) {
+
+    if (currentTry > 0) Utilities.sleep(1000);
+
+    var urlList = [];
+
+    for (var x = 0; x < pendingRequests.length; x++) {
+      urlList.push(pendingRequests[x].url);
+    }
+
+    var response = UrlFetchApp.fetch(
+      "http://64.176.232.213:5000/extract-info",
+      {
+        method: "post",
+        contentType: "application/json",
+        payload: JSON.stringify({
+          urls: urlList
+        }),
+        muteHttpExceptions: true
+      }
+    );
+
+    var json = JSON.parse(response.getContentText());
+
+    if (!json.success) {
+      currentTry++;
+      continue;  
+    }
+
+    var results = json.results;
+
+    var nextPendingRequests = [];
+    var nextPendingIndices = [];
+
+    for (var j = 0; j < results.length; j++) {
+
+      var idx = pendingIndices[j];
+      var result = results[j];
+
+      var success = false;
+
+      if (result.deleted) {
+
+        dates[idx][0] = "삭제됨";
+        authors[idx][0] = "";
+        success = true;
+
+      } else if (result.date && result.author) {
+
+        dates[idx][0] = result.date;
+        authors[idx][0] = result.author;
+        success = true;
+
+      }
+
+      if (!success) {
+        nextPendingRequests.push(pendingRequests[j]);
+        nextPendingIndices.push(idx);
+      }
+
+    }
+
+    pendingRequests = nextPendingRequests;
+    pendingIndices = nextPendingIndices;
+    currentTry++;
+
+  }
+
+  // 3번을 다 튕겨서 실패한 항목들만 최종적으로 처리
+  for (var k = 0; k < pendingIndices.length; k++) {
+    var failedIdx = pendingIndices[k];
+    dates[failedIdx][0] = "retry";
+    authors[failedIdx][0] = ""; //작성자 셀은 빈칸 처리
+  }
+  
+  // 최종 결과 반영
+  dateRange.setValues(dates);
+  authorRange.setValues(authors);
+}
+
+
+
