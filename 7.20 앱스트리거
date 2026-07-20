@@ -1,0 +1,36 @@
+/*
+체크박스(F3, J3)를 누를 때 실행될 메인 트리거 함수입니다.
+ */
+
+function triggerByCheckbox(e) {
+  if (!e) return;
+  var sheet = e.source.getActiveSheet();
+  var range = e.range;
+  var cellAddress = range.getA1Notation();
+  
+  // 1. F3 셀이 체크(TRUE) 되었을 때 작동 (날짜/작성자 추출 및 세탁기 가동)
+  if (cellAddress === 'F3' && range.getValue() === true) {
+    fillEmptyCellsOnly(sheet);
+    // 작업이 끝나면 다음 재시도를 위해 체크박스를 알아서 풀어줍니다.
+    sheet.getRange('F3').setValue(false);
+  }
+
+  // 2. J3 셀이 체크(TRUE) 되었을 때 작동 (이미지 HTML 추출)
+  if (cellAddress === 'J3' && range.getValue() === true) {
+    runImageExtractor(sheet);
+    sheet.getRange('J3').setValue(false);
+  }
+
+    // 3. L3 체크 시 게시글 수정
+  if (cellAddress === 'I3' && range.getValue() === true) {
+    runModify(sheet);
+    sheet.getRange('I3').setValue(false);
+  }
+
+    // 4. M2 체크 시 일반 에디터 게시글 수정
+  if (cellAddress === 'M2' && range.getValue() === true) {
+    runModifyNormal(sheet);
+    sheet.getRange('M2').setValue(false);
+  }
+
+}
